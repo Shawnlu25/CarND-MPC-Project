@@ -9,6 +9,7 @@
 #include "MPC.h"
 #include "json.hpp"
 
+
 // for convenience
 using json = nlohmann::json;
 
@@ -65,6 +66,22 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+Eigen::MatrixXd global_to_local(double x, double y, double psi, const vector<double> & ptsx, const vector<double> & ptsy) {
+
+    assert(ptsx.size() == ptsy.size());
+    unsigned len = ptsx.size();
+
+    auto waypoints = Eigen::MatrixXd(2,len);
+
+    for (auto i=0; i<len ; ++i){
+      waypoints(0,i) = cos(psi) * (ptsx[i] - x) + sin(psi) * (ptsy[i] - y);
+      waypoints(1,i) = -sin(psi) * (ptsx[i] - x) + cos(psi) * (ptsy[i] - y);  
+    } 
+
+    return waypoints;
+
+  }
+
 int main() {
   uWS::Hub h;
 
@@ -98,13 +115,33 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          Eigen::MatrixXd waypoints = global_to_local(px,py,psi,ptsx,ptsy);
+          Eigen::VectorXd Ptsx = waypoints.row(0);
+          Eigen::VectorXd Ptsy = waypoints.row(1);
+
+          // fit a 3rd order polynomial to the waypoints
+          auto coeffs = polyfit(Ptsx, Ptsy, 3);
+
+          double cte = polyeval(coeffs,0);
+          double epsi = -atan(coeffs[1]);
+
+          Eigen::VectorXd state(6);
+          state << 0, 0, 0, v, cte, epsi;
+
+          // compute the optimal trajectory          
+          Solution sol = mpc.Solve(state, coeffs);
+
+          double steer_value = sol.Delta.at(2);
+          double throttle_value= sol.A.at(2);//latency ind
+          mpc.delta_prev = steer_value;
+          mpc.a_prev = throttle_value;
+
+
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
+          msgJson["steering_angle"] = -steer_value/0.436331;
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
@@ -139,7 +176,8 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          int milliseconds_latency = 100; 
+          this_thread::sleep_for(chrono::milliseconds(milliseconds_latency));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

@@ -1,3 +1,14 @@
+# Model Predictive Controller Project
+
+## Introduction
+The goal of this project is to implement a model predictive controller for a car in a virtualized environment. Specifically, the implementation includes track navigation, websocket telementry and waypoint data communication, vehicle modelling and tuning model predictive control. 
+
+## Rubric Points
+### The Model
+
+
+---
+# Original Content
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
