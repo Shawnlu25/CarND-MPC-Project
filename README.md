@@ -4,8 +4,45 @@
 The goal of this project is to implement a model predictive controller for a car in a virtualized environment. Specifically, the implementation includes track navigation, websocket telementry and waypoint data communication, vehicle modelling and tuning model predictive control. 
 
 ## Rubric Points
-### The Model
+### The Vehicle Model
+The vehicle model used is called kinematic bicycle model. To describe it mathematically: 
+```
+// x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+// y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+// psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+// v_[t+1] = v[t] + a[t] * dt
+// cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+// epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
+```
+where `x` and `y` represent the position of car, `psi` is the heading direction, `v` is the vehicle's velocity, `cte` denotes cross-track error and `epsi` is the orientation error. `Lf` is the distance between the fronte wheels and center of mass, the value of which provided by the Udacity course staff. 
 
+### Timestamp Length and Elapsed Duration
+
+The value chosen for timestamp length `N` and elapsed duration `dt` are `N = 12` and `dt = 0.05`. I chose these values so that the car could drive smoothly along the track. Previously tried values include `N=20, dt=0.05`, `N=6, dt=0.1`, `N=10, dt=0.1`, etc.
+
+### Polynomial Fitting and MPC Preprocessing
+Since the computations are done in the vehicle's coordinate system, I pre-processed the waypoints so that it is in vehicle coordinate system. It is done by shifting the origin to vehicle's current position, and then performing a 2D rotation to align x-axis with vehicle's heading direction. Mathematically: 
+```
+X^ = cos(psi) * (ptsx[i] - x) + sin(psi) * (ptsy[i] - y);
+Y^ = -sin(psi) * (ptsx[i] - x) + cos(psi) * (ptsy[i] - y);
+```
+where `X^` and `Y^` are coordinates in vehicle coordinate system. 
+
+### Model Predictive Control with Latency
+The model predictive control can handle 100 ms latency. After a solution of NMPC is done, a delay of 100ms, or 2 timesteps in our current setting (`dt=0.05`) is introduced before the actuations are sent to the simulator. Specifically, latency is taken into account by constraining the controls to values of previous iteration, for a duration of the latency. In other words, the optimal trajectory is computed starting from the time after latency period. 
+
+In MPC solving code, constraints are introduced: 
+```
+for (int i = delta_start; i < delta_start + latency_ind; i++) {
+    vars_lowerbound[i] = delta_prev;
+    vars_upperbound[i] = delta_prev;
+}
+for (int i = a_start; i < a_start+latency_ind; i++) {
+    vars_lowerbound[i] = a_prev;
+    vars_upperbound[i] = a_prev;
+}
+```
+where `delta` and `a` are all constrained to be previous control for the latency time.
 
 ---
 # Original Content
